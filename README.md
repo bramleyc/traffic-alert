@@ -2,7 +2,7 @@
 
 Serverless traffic alerting tool. Checks journey times on configured routes
 at scheduled times and sends a push notification if traffic is significantly
-worse than normal, or if you are likely to miss a target arrival time.
+worse than normal, or if you are likely to miss a target arrival time - or if it's all clear, for reassurance.
 
 Uses the TomTom API and ntfy.sh with limited calls to keep within free tiers.
 
