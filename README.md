@@ -226,19 +226,6 @@ The `Arn` in the response should contain `assumed-role/traffic-alert-deployer`.
 | ntfy topic name | SSM Parameter Store (inside `config.json`) | Pushed by `deploy.sh` |
 | Lambda runtime credentials | IAM Role (`traffic-alert-role`) | Created automatically by `deploy.sh` |
 
-**Never commit `config.json` to version control** if it contains your real
-ntfy topic name. Add it to `.gitignore`:
-
-```
-config.json
-```
-
-Keep a `config.example.json` with placeholder values in the repo instead.
-
-The TomTom API key is intentionally kept out of `config.json` and set as a
-Lambda environment variable directly, so it is never written to disk in this
-project folder.
-
 ---
 
 ## Configuration
@@ -247,9 +234,14 @@ Edit `config.json` before deploying. The file is pushed to SSM by `deploy.sh`
 and read by the Lambda at runtime - you never need to redeploy the Lambda
 code just to change a route or schedule, only re-run `deploy.sh`.
 
-Ensure `config.json` is in your `.gitignore`.
+**Never commit `config.json` to version control** if it contains your real
+ntfy topic name. Add it to `.gitignore`.
 
 There is an example of the format to follow at `config.example.json`.
+
+The TomTom API key is intentionally kept out of `config.json` and set as a
+Lambda environment variable directly, so it is never written to disk in this
+project folder.
 
 
 ### Fields
