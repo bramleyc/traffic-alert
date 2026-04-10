@@ -1,0 +1,35 @@
+{
+  "ntfy_topic": "your-unique-topic-name",
+  "alert_threshold_pct": 20,
+  "routes": [
+    {
+      "name": "Home to Work With School Dropoff Example",
+      "origin": "53.4808,-2.2426",
+      "destination": "53.5228,-2.1756",
+      "waypoints": ["53.4900,-2.2300"],
+      "checks": [
+        {
+          "time_utc": "06:45",
+          "days": ["MON","TUE","WED","THU","FRI"],
+          "target_arrival_utc": "07:30"
+        }
+      ]
+    },
+    {
+      "name": "Work to Home Example",
+      "origin": "53.350076,-2.554797",
+      "destination": "53.345120,-2.676732",
+      "waypoints": [],
+      "checks": [
+        { "time_utc": "13:45",
+          "days": ["MON","TUE","WED","THU","FRI"],
+          "target_arrival_utc": "14:30"
+        },
+        { "time_utc": "14:05",
+          "days": ["MON","TUE","WED","THU","FRI"],
+          "target_arrival_utc": "14:30"
+        }
+      ]
+    }
+  ]
+}
