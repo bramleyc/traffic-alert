@@ -81,29 +81,28 @@ fi
 # EventBridge rule: every minute during the day
 RULE_NAME="${FUNCTION_NAME}-every-minute"
 
-if ! aws events describe-rule --name "$RULE_NAME" --region "$REGION" > /dev/null 2>&1; then
-  echo "==> Creating EventBridge rule (every minute)..."
-  aws events put-rule \
-    --name "$RULE_NAME" \
-    --schedule-expression "cron(* 5-20 ? * * *)" \
-    --state ENABLED \
-    --region "$REGION" > /dev/null
+echo "==> Updating EventBridge rule (every minute)..."
+aws events put-rule \
+  --name "$RULE_NAME" \
+  --schedule-expression "cron(* 5-20 ? * * *)" \
+  --state ENABLED \
+  --region "$REGION" > /dev/null
 
-  LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}"
+LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}"
 
-  aws events put-targets \
-    --rule "$RULE_NAME" \
-    --targets "Id=1,Arn=${LAMBDA_ARN}" \
-    --region "$REGION" > /dev/null
+aws events put-targets \
+  --rule "$RULE_NAME" \
+  --targets "Id=1,Arn=${LAMBDA_ARN}" \
+  --region "$REGION" > /dev/null
 
-  aws lambda add-permission \
-    --function-name "$FUNCTION_NAME" \
-    --statement-id "allow-eventbridge" \
-    --action lambda:InvokeFunction \
-    --principal events.amazonaws.com \
-    --source-arn "arn:aws:events:${REGION}:${ACCOUNT_ID}:rule/${RULE_NAME}" \
-    --region "$REGION" > /dev/null
-fi
+# add-permission is idempotent-ish: ignore error if statement already exists
+aws lambda add-permission \
+  --function-name "$FUNCTION_NAME" \
+  --statement-id "allow-eventbridge" \
+  --action lambda:InvokeFunction \
+  --principal events.amazonaws.com \
+  --source-arn "arn:aws:events:${REGION}:${ACCOUNT_ID}:rule/${RULE_NAME}" \
+  --region "$REGION" > /dev/null 2>&1 || true
 
 # Short log retention to stay within CloudWatch free tier
 aws logs put-retention-policy \
