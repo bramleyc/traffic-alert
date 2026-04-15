@@ -1,33 +1,60 @@
 {
-  "ntfy_topic": "your-unique-topic-name",
-  "alert_threshold_pct": 20,
-  "routes": [
+  "profiles": [
     {
-      "name": "Home to Work With School Dropoff Example",
-      "origin": "53.4808,-2.2426",
-      "destination": "53.5228,-2.1756",
-      "waypoints": ["53.4900,-2.2300"],
-      "checks": [
+      "name": "Person A",
+      "ntfy_topic": "your-unique-topic-name",
+      "home": "53.4808,-2.2426",
+      "alert_threshold_pct": 20,
+      "routes": [
         {
-          "time_utc": "06:45",
-          "days": ["MON","TUE","WED","THU","FRI"],
-          "target_arrival_utc": "07:30"
+          "name": "Home to Work With School Dropoff Example",
+          "origin": "53.4808,-2.2426",
+          "destination": "53.5228,-2.1756",
+          "waypoints": ["53.4900,-2.2300"],
+          "checks": [
+            {
+              "time_utc": "06:45",
+              "days": ["MON","TUE","WED","THU","FRI"],
+              "target_arrival_utc": "07:30"
+            }
+          ]
+        },
+        {
+          "name": "Work to Home Example",
+          "origin": "53.350076,-2.554797",
+          "destination": "53.345120,-2.676732",
+          "waypoints": [],
+          "checks": [
+            { "time_utc": "13:45",
+              "days": ["MON","TUE","WED","THU","FRI"],
+              "target_arrival_utc": "14:30"
+            },
+            { "time_utc": "14:05",
+              "days": ["MON","TUE","WED","THU","FRI"],
+              "target_arrival_utc": "14:30"
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Work to Home Example",
-      "origin": "53.350076,-2.554797",
-      "destination": "53.345120,-2.676732",
-      "waypoints": [],
-      "checks": [
-        { "time_utc": "13:45",
-          "days": ["MON","TUE","WED","THU","FRI"],
-          "target_arrival_utc": "14:30"
-        },
-        { "time_utc": "14:05",
-          "days": ["MON","TUE","WED","THU","FRI"],
-          "target_arrival_utc": "14:30"
+      "name": "Person B",
+      "ntfy_topic": "another-unique-topic-name",
+      "home": "51.5074,-0.1278",
+      "alert_threshold_pct": 15,
+      "routes": [
+        {
+          "name": "Commute Example",
+          "origin": "51.5074,-0.1278",
+          "destination": "51.5155,-0.0922",
+          "waypoints": [],
+          "checks": [
+            {
+              "time_utc": "07:30",
+              "days": ["MON","TUE","WED","THU","FRI"],
+              "target_arrival_utc": "08:30"
+            }
+          ]
         }
       ]
     }

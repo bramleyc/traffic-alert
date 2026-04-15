@@ -2,28 +2,37 @@
 
 Serverless traffic alerting tool. Checks journey times on configured routes
 at scheduled times and sends a push notification if traffic is significantly
-worse than normal, or if you are likely to miss a target arrival time - or if it's all clear, for reassurance.
+worse than normal, or if you are likely to miss a target arrival time — or if
+it's all clear, for reassurance. Also automatically picks up events from Google
+Calendar and generates alerts based on the free-flow journey time from home.
 
 Uses the TomTom API and ntfy.sh with limited calls to keep within free tiers.
 
-**Stack:** AWS Lambda + EventBridge + SSM Parameter Store · TomTom Routing API · ntfy.sh
+**Stack:** AWS Lambda + EventBridge + SSM Parameter Store · TomTom Routing API · Google Calendar API · ntfy.sh
 
 ---
 
 ## How it works
 
-- A Lambda function runs every minute via EventBridge (configurable - currently runs during daytime only)
-- On each invocation it checks whether the current UTC time and day matches
-  any configured route check
-- If it matches, it calls the TomTom Routing API twice: once with live
-  traffic, once without (free-flow)
-- It compares the two and evaluates two alert conditions:
+- A Lambda function runs every minute via EventBridge (currently 05:00–20:00 UTC)
+- On each invocation it handles two types of checks:
+
+**Scheduled route checks** (defined in `config.json`):
+- Checks whether the current UTC time and day matches any configured route check
+- If it matches, calls the TomTom Routing API twice: once with live traffic, once without (free-flow)
+- Evaluates two alert conditions:
   - Journey time is more than `alert_threshold_pct`% above free-flow
   - Current journey time means you will miss your `target_arrival_utc`
-- A push notification is sent via ntfy.sh if either condition is met
-- An all-clear notification is sent if the previous check was an alert but
-  traffic has since returned to normal OR the traffic on the route looks all-clear
-- State (whether the last check alerted) is persisted in SSM Parameter Store
+- Sends a push notification via ntfy.sh if either condition is met, or an all-clear if not
+
+**Calendar-based checks** (from Google Calendar):
+- Fetches today's events from each profile's Google Calendar
+- Events without a Location field are ignored; the location is geocoded via TomTom
+- On first encounter, calculates free-flow time from home and sets two check windows:
+  2× and 1.5× free-flow before the event start time (rounded to 5 min)
+- At those computed times, runs a traffic check with the event start as the target arrival
+
+State (whether the last check alerted) is persisted in SSM Parameter Store.
 
 ---
 
@@ -31,11 +40,13 @@ Uses the TomTom API and ntfy.sh with limited calls to keep within free tiers.
 
 ```
 traffic-alert/
-  lambda_function.py   — Lambda handler
-  config.json          — Route and schedule configuration (you edit this but do not deploy)
-  requirements.txt     — Python dependencies
-  deploy.sh            — Deploys everything to AWS
-  README.md            — This file
+  lambda_function.py      — Lambda handler
+  config.json             — Route, schedule, and profile configuration (gitignored)
+  config.example.json     — Example config to copy from
+  requirements.txt        — Python dependencies
+  deploy.sh               — Deploys everything to AWS
+  google-credentials.json — Google service account key (gitignored, pushed to SSM by deploy.sh)
+  README.md               — This file
 ```
 
 ---
@@ -46,6 +57,7 @@ traffic-alert/
 - Python 3 and pip installed locally
 - A TomTom API key — free at https://developer.tomtom.com, no credit card needed
 - ntfy app installed on your phone (iOS / Android, free)
+- A Google Cloud project with the Calendar API enabled (see Google Calendar Setup below)
 
 ---
 
@@ -217,56 +229,93 @@ The `Arn` in the response should contain `assumed-role/traffic-alert-deployer`.
 
 ---
 
+## Google Calendar Setup
+
+Calendar alerts are driven by a Google service account that reads each
+profile's calendar. Events without a Location field are ignored.
+
+#### 1. Create a Google Cloud project and enable the Calendar API
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create a new project (e.g. `traffic-alert`)
+3. Use the top search bar to find **Google Calendar API** → Enable it
+
+#### 2. Create a service account
+
+1. Search for **Service Accounts** in the console
+2. Click **+ Create Service Account** — name it `traffic-alert`
+3. Skip both optional permissions steps (no IAM role is needed)
+4. Open the created service account → **Keys** tab → **Add Key → Create new key → JSON**
+5. Save the downloaded file as `google-credentials.json` in this directory
+   (it is gitignored and pushed to SSM automatically by `deploy.sh`)
+
+#### 3. Share each calendar with the service account
+
+1. In [Google Calendar](https://calendar.google.com), open Settings for the calendar
+2. Under **Share with specific people** → add the service account email
+   (looks like `traffic-alert@your-project-id.iam.gserviceaccount.com`)
+3. Set permission to **See all event details**
+
+#### 4. Get the calendar ID
+
+In Google Calendar settings → **Integrate calendar** → copy the **Calendar ID**.
+Set it as `calendar_id` in `config.json` for the relevant profile.
+
+---
+
 ## Secrets and credentials
 
 | Secret | Where it lives | How it gets there |
 |---|---|---|
 | AWS CLI keys | `~/.aws/credentials` — never in this project | `aws configure` |
-| TomTom API key | Lambda environment variable | Set manually after deploy (see below) |
+| TomTom API key | Lambda environment variable | Set manually after first deploy (see below) |
 | ntfy topic name | SSM Parameter Store (inside `config.json`) | Pushed by `deploy.sh` |
+| Google service account key | SSM Parameter Store (`/traffic-alert/google-credentials`) | Pushed by `deploy.sh` if `google-credentials.json` exists |
 | Lambda runtime credentials | IAM Role (`traffic-alert-role`) | Created automatically by `deploy.sh` |
 
 ---
 
 ## Configuration
 
-Edit `config.json` before deploying. The file is pushed to SSM by `deploy.sh`
-and read by the Lambda at runtime - you never need to redeploy the Lambda
-code just to change a route or schedule, only re-run `deploy.sh`.
+Edit `config.json` before deploying. It is pushed to SSM by `deploy.sh` and
+read by the Lambda at runtime — you never need to redeploy Lambda code just to
+change a route or schedule, only re-run `deploy.sh`.
 
-**Never commit `config.json` to version control** if it contains your real
-ntfy topic name. Add it to `.gitignore`.
+**Never commit `config.json` to version control** — it is gitignored.
 
-There is an example of the format to follow at `config.example.json`.
+See `config.example.json` for a full example.
 
-The TomTom API key is intentionally kept out of `config.json` and set as a
-Lambda environment variable directly, so it is never written to disk in this
-project folder.
-
-
-### Fields
+### Schema
 
 **Top level**
 
-- `ntfy_topic` — your ntfy.sh topic name. Make it unguessable as ntfy topics are public by default.
-- `alert_threshold_pct` — percentage above free-flow journey time that
-  triggers a warning alert. Default: `20`.
+- `google_credentials_ssm` — SSM path to the Google service account JSON.
+  Defaults to `/traffic-alert/google-credentials`.
+- `profiles` — list of user profiles (see below).
+
+**Per profile**
+
+- `name` — display name, used in log output and as a state key prefix.
+- `ntfy_topic` — ntfy.sh topic name. Make it unguessable as topics are public by default.
+- `home` — `"lat,lon"` of the person's home address. Used as the origin for all calendar-based route checks.
+- `calendar_id` — Google Calendar ID to monitor for events (optional).
+- `alert_threshold_pct` — percentage above free-flow journey time that triggers a warning. Default: `20`.
+- `routes` — list of scheduled route checks (see below).
 
 **Per route**
 
-- `name` — display name used in notifications
-- `origin` — latitude,longitude of start point
-- `destination` — latitude,longitude of end point
-- `waypoints` — optional list of intermediate latitude,longitude stops.
-  Leave as `[]` if not needed.
-- `checks` — list of scheduled checks for this route
+- `name` — display name used in notifications.
+- `origin` — `"lat,lon"` of the start point.
+- `destination` — `"lat,lon"` of the end point.
+- `waypoints` — optional list of intermediate `"lat,lon"` stops. Leave as `[]` if not needed.
+- `checks` — list of scheduled checks for this route.
 
 **Per check**
 
-- `time_utc` — time to run this check in UTC (24hr, e.g. `"07:15"`)
-- `days` — list of days to run: `MON TUE WED THU FRI SAT SUN`
+- `time_utc` — time to run this check in UTC (24hr, e.g. `"07:15"`).
+- `days` — list of days to run: `MON TUE WED THU FRI SAT SUN`.
 - `target_arrival_utc` — UTC time you need to arrive by. An alert fires if
-  your ETA exceeds this. Set to `null` to disable this condition.
+  your ETA exceeds this. Omit to disable this condition.
 
 ### UTC vs local time
 
@@ -285,6 +334,16 @@ In Google Maps, right-click any location and click the coordinates shown at
 the top of the context menu to copy them. They are in `latitude,longitude`
 format as required.
 
+### Calendar events
+
+Any event in the monitored Google Calendar that has a **Location** field set
+will automatically generate traffic alerts. The location is geocoded via
+TomTom on first encounter. Events without a location are silently ignored.
+
+Check windows are calculated as **2× and 1.5× the free-flow journey time**
+before the event start (rounded to the nearest 5 min). For example, a 30-minute
+free-flow journey to a 10:00 event generates checks at 08:00 and 08:30.
+
 ---
 
 ## Deploy
@@ -297,16 +356,17 @@ chmod +x deploy.sh
 The script will:
 
 1. Push `config.json` to SSM Parameter Store
-2. Package and deploy (or update) the Lambda function
-3. Create the Lambda execution IAM role if it does not exist
-4. Create the EventBridge rule (runs every minute by default unless you change the regex) if it does not exist
-5. Set CloudWatch log retention to 1 day
+2. Push `google-credentials.json` to SSM (if the file exists)
+3. Package and deploy (or update) the Lambda function
+4. Create the Lambda execution IAM role if it does not exist
+5. Create/update the EventBridge rule (runs every minute, 05:00–20:00 UTC)
+6. Set CloudWatch log retention to 1 day
 
 ### Set the TomTom API key
 
-The deploy script prints this command at the end - run it with your real key. It will print this statement each time you deploy, but you only need to run it at the first time you set it up, unless you:
-- Delete and recreate the Lambda function from scratch
-- Accidentally run update-function-configuration with the placeholder REPLACE_ME still in it
+The deploy script prints this command at the end. Run it once with your real
+key after the first deploy (you do not need to re-run it on subsequent deploys
+unless you recreate the Lambda from scratch).
 
 ```bash
 aws lambda update-function-configuration \
@@ -322,8 +382,7 @@ aws lambda update-function-configuration \
 
 ### Updating routes or schedules
 
-Edit `config.json` and re-run `./deploy.sh`. The Lambda code is not
-repackaged unless `lambda_function.py` has changed.
+Edit `config.json` and re-run `./deploy.sh`.
 
 ---
 
@@ -367,9 +426,6 @@ aws lambda invoke \
 ```
 
 Set `test_time_utc` and `test_day` to match one of your configured checks.
-The Lambda will run as if it is that time and day, fetch live traffic, and
-send a notification if the conditions are met. There is a test route in the config with an unrealistic time (Sun 07:45). If you want to test a likely "all clear" then use 06:15 and Mon.
-
 A successful response looks like:
 
 ```json
@@ -381,18 +437,15 @@ an alert was sent.
 
 ---
 
-## AWS free tier
-
-This project runs entirely within AWS's permanent free tier (no 12-month
-expiry).
+## Free tier summary
 
 | Service | Usage | Free tier |
 |---|---|---|
-| Lambda | ~44,640 invocations/month | 1,000,000/month |
-| Lambda compute | ~2,800 GB-seconds/month | 400,000 GB-seconds/month |
+| Lambda | ~13,500 invocations/month | 1,000,000/month |
+| Lambda compute | ~850 GB-seconds/month | 400,000 GB-seconds/month |
 | EventBridge Rules | 1 rule | Free |
-| SSM Parameter Store | 2 standard parameters | Free |
+| SSM Parameter Store | 3 standard parameters | Free |
 | CloudWatch Logs | Minimal (1-day retention) | 5 GB/month |
-
-TomTom free tier: 2,500 non-tile API requests/day. A typical setup with
-2 routes × 3 checks × 2 API calls (live + free-flow) = 12 calls/day.
+| Google Calendar API | ~900 reads/day | 1,000,000/day |
+| TomTom Routing API | ~12 calls/day (scheduled) + 2 per calendar check | 2,500/day |
+| TomTom Geocoding API | Once per new calendar event (cached) | 2,500/day |

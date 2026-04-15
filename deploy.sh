@@ -15,6 +15,16 @@ aws ssm put-parameter \
   --overwrite \
   --region "$REGION" > /dev/null
 
+if [ -f google-credentials.json ]; then
+  echo "==> Pushing Google credentials to SSM..."
+  aws ssm put-parameter \
+    --name "/traffic-alert/google-credentials" \
+    --value file://google-credentials.json \
+    --type String \
+    --overwrite \
+    --region "$REGION" > /dev/null
+fi
+
 echo "==> Packaging Lambda..."
 pip install -r requirements.txt -t package/ --quiet
 cp lambda_function.py package/
@@ -113,12 +123,21 @@ aws logs put-retention-policy \
 echo ""
 echo "==> Done."
 echo ""
-echo "Next: set your TomTom API key:"
+echo "Next steps if setting up for the first time:"
 echo ""
-echo "  aws lambda update-function-configuration \\"
-echo "    --function-name $FUNCTION_NAME \\"
-echo "    --region $REGION \\"
-echo "    --environment 'Variables={TOMTOM_API_KEY=your_key_here,SSM_CONFIG=/traffic-alert/config,SSM_STATE=/traffic-alert/state}'"
+echo "1. Set your TomTom API key:"
+echo "   aws lambda update-function-configuration \\"
+echo "     --function-name $FUNCTION_NAME \\"
+echo "     --region $REGION \\"
+echo "     --environment 'Variables={TOMTOM_API_KEY=your_key_here,SSM_CONFIG=/traffic-alert/config,SSM_STATE=/traffic-alert/state}'"
+echo ""
+echo "2. Set up Google Calendar integration:"
+echo "   a. Create a Google Cloud project and enable the Calendar API"
+echo "   b. Create a service account and download its JSON key as google-credentials.json"
+echo "   c. Share each calendar with the service account email (read-only)"
+echo "   d. Set calendar_id in config.json and re-run ./deploy.sh"
+echo "   (google-credentials.json is gitignored and pushed to SSM automatically)"
 echo ""
 echo "Remember: all times in config.json are UTC. BST = UTC+1 in summer."
+echo "Calendar events need a Location field set to generate traffic alerts."
 rm -f function.zip
