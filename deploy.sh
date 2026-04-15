@@ -26,7 +26,14 @@ if [ -f google-credentials.json ]; then
 fi
 
 echo "==> Packaging Lambda..."
-pip install -r requirements.txt -t package/ --quiet
+pip install \
+  --platform manylinux2014_x86_64 \
+  --target package/ \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  -r requirements.txt \
+  --quiet
 cp lambda_function.py package/
 cd package && zip -r ../function.zip . -x "*.pyc" > /dev/null && cd ..
 rm -rf package
