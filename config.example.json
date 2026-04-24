@@ -4,7 +4,12 @@
       "name": "Person A",
       "ntfy_topic": "your-unique-topic-name",
       "home": "53.4808,-2.2426",
+      "calendar_id":"something@group.calendar.google.com",
       "alert_threshold_pct": 20,
+      "notify_mode": {
+        "routes": "always",
+        "calendar": "alert_only"
+      },
       "routes": [
         {
           "name": "Home to Work With School Dropoff Example",

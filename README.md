@@ -300,6 +300,15 @@ See `config.example.json` for a full example.
 - `home` — `"lat,lon"` of the person's home address. Used as the origin for all calendar-based route checks.
 - `calendar_id` — Google Calendar ID to monitor for events (optional).
 - `alert_threshold_pct` — percentage above free-flow journey time that triggers a warning. Default: `20`.
+- `notify_mode` — controls when notifications are sent (optional). Both keys default to `"always"` if omitted.
+  - `routes` — `"always"` sends an alert or all-clear on every scheduled check. `"alert_only"` only sends when a threshold is breached or a target arrival will be missed.
+  - `calendar` — same options, applied to calendar-driven checks.
+
+  Example — all-clear for routes, silent unless traffic is bad for calendar events:
+  ```json
+  "notify_mode": { "routes": "always", "calendar": "alert_only" }
+  ```
+
 - `routes` — list of scheduled route checks (see below).
 
 **Per route**

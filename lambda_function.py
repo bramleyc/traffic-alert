@@ -150,6 +150,7 @@ def evaluate_route(
     threshold_pct: float,
     prev_alerted: bool,
     topic: str,
+    alert_only: bool = False,
 ) -> bool:
     route_name = route["name"]
     print(f"  Checking '{route_name}'...")
@@ -196,7 +197,7 @@ def evaluate_route(
         message = "\n".join(alert_reasons) + f"\n\nRoute: {route_name}"
         print(f"  ALERT: {message}")
         notify(topic, f"🚗 Traffic Alert — {route_name}", message, priority="high")
-    else:
+    elif not alert_only:
         message = f"Traffic is fine. Journey: {live_mins}min (usual: {ff_mins}min).\n\nRoute: {route_name}"
         print(f"  ALL CLEAR: {message}")
         notify(topic, f"✅ All Clear — {route_name}", message, priority="default")
@@ -321,6 +322,7 @@ def handle_calendar(
             threshold_pct=float(profile.get("alert_threshold_pct", 20)),
             prev_alerted=prev_alerted,
             topic=profile["ntfy_topic"],
+            alert_only=profile.get("notify_mode", {}).get("calendar", "always") == "alert_only",
         )
         state[state_key] = alerted
 
@@ -388,6 +390,7 @@ def lambda_handler(event, context):
 
                 state_key    = f"{profile_name}|{route['name']}|{check['time_utc']}"
                 prev_alerted = state.get(state_key, False)
+                alert_only   = profile.get("notify_mode", {}).get("routes", "always") == "alert_only"
 
                 alerted = evaluate_route(
                     route=route,
@@ -396,6 +399,7 @@ def lambda_handler(event, context):
                     threshold_pct=threshold_pct,
                     prev_alerted=prev_alerted,
                     topic=topic,
+                    alert_only=alert_only,
                 )
                 state[state_key] = alerted
 
