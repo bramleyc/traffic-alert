@@ -60,14 +60,16 @@ def get_times(route: dict) -> tuple[int, int]:
 
 
 def geocode(address: str) -> str | None:
-    """Return 'lat,lon' for a plain-text address using the TomTom Search API."""
-    encoded = urllib.parse.quote(address)
-    url = f"https://api.tomtom.com/search/2/geocode/{encoded}.json?key={TOMTOM_API_KEY}&limit=1"
+    """Return 'lat,lon' for a plain-text address using Nominatim (OpenStreetMap)."""
+    url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(address)}&format=json&limit=1"
+    req = urllib.request.Request(url, headers={"User-Agent": "traffic-alert/1.0"})
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        pos = data["results"][0]["position"]
-        return f"{pos['lat']},{pos['lon']}"
+        if not data:
+            print(f"  Geocode: no results for '{address}'")
+            return None
+        return f"{data[0]['lat']},{data[0]['lon']}"
     except Exception as e:
         print(f"  Geocode error for '{address}': {e}")
         return None
@@ -269,13 +271,15 @@ def handle_calendar(
             # Resolve lat/lon destination
             destination = geocode(cal_event["location"])
             if not destination:
-                continue  # geocode() already printed the error
+                state[init_key] = {"error": "geocode failed"}
+                continue
 
             # Free-flow time from home
             try:
                 _, ff_secs = get_times({"origin": home, "destination": destination, "waypoints": []})
             except Exception as e:
                 print(f"  Calendar: TomTom error initialising '{event_name}': {e}")
+                state[init_key] = {"error": "tomtom failed"}
                 continue
 
             ff_mins = ff_secs / 60
@@ -288,16 +292,20 @@ def handle_calendar(
                 if t is not None
             ]
             state[init_key] = {
-                "destination":    destination,
+                "destination":     destination,
                 "check_times_utc": check_times,
-                "free_flow_mins": round(ff_mins, 1),
+                "free_flow_mins":  round(ff_mins, 1),
             }
             print(
                 f"  Calendar: '{event_name}' checks at {check_times} "
                 f"(free-flow: {round(ff_mins)}min, event at {event_time} UTC)"
             )
 
-        init_data   = state[init_key]
+        init_data = state[init_key]
+        if "error" in init_data:
+            print(f"  Calendar: skipping '{event_name}' — init previously failed ({init_data['error']})")
+            continue
+
         check_times = init_data["check_times_utc"]
 
         if now_time not in check_times:
