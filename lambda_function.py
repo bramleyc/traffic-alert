@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.request
 import urllib.parse
 from datetime import datetime, timezone, timedelta
@@ -59,20 +60,36 @@ def get_times(route: dict) -> tuple[int, int]:
     return live, ff
 
 
-def geocode(address: str) -> str | None:
-    """Return 'lat,lon' for a plain-text address using Nominatim (OpenStreetMap)."""
-    url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(address)}&format=json&limit=1"
+def _nominatim(query: str) -> str | None:
+    url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1"
     req = urllib.request.Request(url, headers={"User-Agent": "traffic-alert/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        if not data:
-            print(f"  Geocode: no results for '{address}'")
-            return None
-        return f"{data[0]['lat']},{data[0]['lon']}"
+        if data:
+            return f"{data[0]['lat']},{data[0]['lon']}"
     except Exception as e:
-        print(f"  Geocode error for '{address}': {e}")
-        return None
+        print(f"  Geocode error for '{query}': {e}")
+    return None
+
+
+def geocode(address: str) -> str | None:
+    """Return 'lat,lon' for a plain-text address using Nominatim (OpenStreetMap).
+    Falls back to just the UK postcode if the full address returns no results."""
+    result = _nominatim(address)
+    if result:
+        return result
+
+    postcode_match = re.search(r"\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b", address, re.IGNORECASE)
+    if postcode_match:
+        postcode = postcode_match.group()
+        print(f"  Geocode: no results for full address, trying postcode '{postcode}'")
+        result = _nominatim(postcode)
+        if result:
+            return result
+
+    print(f"  Geocode: no results for '{address}'")
+    return None
 
 
 # ---------------------------------------------------------------------------
